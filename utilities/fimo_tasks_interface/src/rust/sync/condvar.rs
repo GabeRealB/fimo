@@ -6,12 +6,12 @@ use std::sync::atomic::{AtomicPtr, Ordering};
 /// A Condition Variable.
 #[derive(Debug)]
 pub struct Condvar {
-    inner: CondvarInner,
+    raw: RawCondvar,
     state: AtomicPtr<Mutex<()>>,
 }
 
 #[derive(Debug)]
-pub(crate) struct CondvarInner {
+pub(crate) struct RawCondvar {
     raw: RawTask,
 }
 
@@ -21,11 +21,6 @@ pub(crate) struct CondvarWaitData<'a, 's, T> {
     bad_mutex: bool,
     state: &'s AtomicPtr<Mutex<()>>,
     guard: ManuallyDrop<MutexGuard<'a, T>>,
-}
-
-pub(crate) struct WaitAndLockData<'a, T> {
-    pub locked: bool,
-    pub mutex: &'a Mutex<T>,
 }
 
 impl Default for Condvar {
@@ -42,7 +37,7 @@ impl Condvar {
     /// **Must** be run from within a task.
     pub fn new() -> Self {
         Self {
-            inner: CondvarInner::new(),
+            raw: RawCondvar::new(),
             state: AtomicPtr::new(std::ptr::null_mut()),
         }
     }
@@ -65,7 +60,7 @@ impl Condvar {
         };
 
         // wait for a signal and unlock the mutex.
-        self.inner.wait_and_release(&mut data);
+        self.raw.wait_and_release(&mut data);
 
         // panic if we tried to use multiple mutexes with a Condvar.
         if data.bad_mutex {
@@ -88,7 +83,7 @@ impl Condvar {
     ///
     /// **Must** be run from within a task.
     pub fn notify_one(&self) {
-        self.inner.notify_one_and_reset(&self.state)
+        self.raw.notify_one_and_reset(&self.state)
     }
 
     /// Notifies all waiting tasks.
@@ -97,11 +92,11 @@ impl Condvar {
     ///
     /// **Must** be run from within a task.
     pub fn notify_all(&self) {
-        self.inner.notify_all_and_reset(&self.state)
+        self.raw.notify_all_and_reset(&self.state)
     }
 }
 
-impl CondvarInner {
+impl RawCondvar {
     pub(crate) fn new() -> Self {
         Self {
             raw: get_runtime().spawn_empty_blocked(&[]),
@@ -110,28 +105,6 @@ impl CondvarInner {
 
     pub(crate) fn wait_on_if(&self, predicate: Option<WaitOnFn>) {
         self.raw.wait_on_if(predicate)
-    }
-
-    pub(crate) fn wait_and_try_lock<'a, T: 'a>(&self, data: &mut WaitAndLockData<'a, T>) {
-        let try_lock = |data: usize| {
-            let data = unsafe { &mut *(data as *mut WaitAndLockData<'a, T>) };
-            if let Some(guard) = data.mutex.try_lock() {
-                // we could acquire the lock and don't need to wait.
-                forget(guard);
-                data.locked = true;
-                false
-            } else {
-                // continue with locking.
-                true
-            }
-        };
-
-        let data_ptr = data as *mut _ as usize;
-        self.wait_on_if(Some(WaitOnFn {
-            data: data_ptr,
-            validate: try_lock,
-            after_sleep: |_, _| {},
-        }))
     }
 
     pub(crate) fn wait_and_release<'a, 's, T: 'a + 's>(
@@ -156,13 +129,17 @@ impl CondvarInner {
             true
         }
 
-        fn unlock_mutex<'a, 's, T: 'a + 's>(notify_fn: &mut dyn FnMut(TaskHandle), data: usize) {
+        fn unlock_mutex<'a, 's, T: 'a + 's>(
+            notify_fn: &mut dyn FnMut(TaskHandle, Option<NotifyFn>),
+            data: usize,
+        ) {
             let data = unsafe { &mut *(data as *mut CondvarWaitData<'a, 's, T>) };
             let guard = unsafe { ManuallyDrop::take(&mut data.guard) };
 
             // unlock the mutex with `notify_fn`.
             data.unlocked = true;
-            unsafe { guard.lock.force_unlock_with_notify(notify_fn) };
+            let raw = guard.lock.get_raw();
+            unsafe { raw.unlock_with_notify(notify_fn) };
             forget(guard);
         }
 
@@ -178,9 +155,17 @@ impl CondvarInner {
         unsafe { self.raw.notify_finished_one() };
     }
 
-    pub(crate) fn notify_one_with_function(&self, notify_fn: &mut dyn FnMut(TaskHandle)) {
+    pub(crate) unsafe fn notify_one_and_then(&self, after_wake: Option<NotifyFn>) {
+        self.raw.notify_finished_one_and_then(after_wake)
+    }
+
+    pub(crate) fn notify_one_with_function(
+        &self,
+        after_wake: Option<NotifyFn>,
+        notify_fn: &mut dyn FnMut(TaskHandle, Option<NotifyFn>),
+    ) {
         if self.raw.is_blocked() {
-            notify_fn(self.raw.get_handle())
+            notify_fn(self.raw.get_handle(), after_wake)
         }
     }
 
@@ -197,7 +182,7 @@ impl CondvarInner {
 
         let data_ptr = state as *const _ as usize;
         unsafe {
-            self.raw.notify_finished_one_and_then(Some(NotifyFn {
+            self.notify_one_and_then(Some(NotifyFn {
                 data: data_ptr,
                 function: reset,
             }))

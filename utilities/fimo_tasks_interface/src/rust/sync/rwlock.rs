@@ -1,4 +1,4 @@
-use crate::rust::sync::condvar::CondvarInner;
+use crate::rust::sync::condvar::RawCondvar;
 use crate::rust::sync::SpinWait;
 use crate::rust::WaitOnFn;
 use std::fmt::{Debug, Display, Formatter};
@@ -9,7 +9,7 @@ use std::panic::{RefUnwindSafe, UnwindSafe};
 /// A reader-writer lock.
 pub struct RwLock<T> {
     data: parking_lot::RwLock<T>,
-    condvar: CondvarInner,
+    condvar: RawCondvar,
 }
 
 /// RAII structure used to release the
@@ -34,7 +34,7 @@ impl<T> RwLock<T> {
     pub fn new(val: T) -> Self {
         Self {
             data: parking_lot::RwLock::new(val),
-            condvar: CondvarInner::new(),
+            condvar: RawCondvar::new(),
         }
     }
 

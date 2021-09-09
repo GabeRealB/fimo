@@ -30,8 +30,11 @@ pub struct WaitOnFn {
     ///
     /// Is called while the runtime is locked and
     /// can not call into the runtime or panic.
-    pub after_sleep: fn(notify_fn: &mut dyn FnMut(TaskHandle), data: usize),
+    pub after_sleep: AfterSleepFn,
 }
+
+/// Type of the function that is called after a task has been put to sleep.
+pub type AfterSleepFn = fn(notify_fn: &mut dyn FnMut(TaskHandle, Option<NotifyFn>), data: usize);
 
 /// Function passed to the [`TaskRuntimeInner::notify_finished_one_and_then`] and
 /// [`TaskRuntimeInner::broadcast_finished_and_then`] functions.

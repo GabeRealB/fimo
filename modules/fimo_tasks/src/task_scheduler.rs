@@ -437,8 +437,9 @@ impl TaskScheduler {
                     // set to waiting.
                     unsafe { task.set_status(TaskStatus::Waiting) };
 
-                    let mut notify_fn =
-                        |task: TaskHandle| unsafe { self.notify_finished_one(task, None) };
+                    let mut notify_fn = |task: TaskHandle, after_wake: Option<NotifyFn>| unsafe {
+                        self.notify_finished_one(task, after_wake)
+                    };
 
                     // call the `after_sleep` callback.
                     if let Some(w) = predicate {
