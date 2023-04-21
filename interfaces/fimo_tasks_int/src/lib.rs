@@ -21,6 +21,8 @@ use fimo_module::Queryable;
 
 pub mod sync;
 
+pub mod blockable;
+
 pub mod raw;
 pub mod runtime;
 pub mod task;
