@@ -607,6 +607,7 @@ unsafe impl<T: ?Sized, A: Allocator> CTypeBridge for ObjBox<T, A>
 where
     A: CTypeBridge,
     A::Type: Allocator,
+    T: CTypeBridge<Type = T>,
 {
     default type Type = ObjBox<T, A::Type>;
 

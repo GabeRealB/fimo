@@ -1,4 +1,6 @@
 //! Marshalling utilities.
+use std::ptr::NonNull;
+
 pub use fimo_ffi_codegen::CTypeBridge;
 
 /// Bridge for Rust to Rust types.
@@ -206,6 +208,22 @@ where
     }
 }
 
+unsafe impl<T: ?Sized> CTypeBridge for NonNull<T>
+where
+    *mut T: CTypeBridge,
+{
+    type Type = <*mut T as CTypeBridge>::Type;
+
+    fn marshal(self) -> Self::Type {
+        <*mut T as CTypeBridge>::marshal(self.as_ptr())
+    }
+
+    unsafe fn demarshal(x: Self::Type) -> Self {
+        let ptr = <*mut T as CTypeBridge>::demarshal(x);
+        Self::new_unchecked(ptr)
+    }
+}
+
 unsafe impl<'a, T: ?Sized> CTypeBridge for &'a T
 where
     &'a T: private::CPointerRep,
@@ -247,6 +265,64 @@ where
         <&'a mut T as private::CPointerRep>::reconstruct(x)
     }
 }
+
+// Function pointers
+
+macro_rules! fnptr_impls_safety_abi {
+    ($FnTy: ty, $($Arg: ident),*) => {
+        unsafe impl<Ret, $($Arg),*> CTypeBridge for $FnTy {
+            type Type = Self;
+
+            #[inline]
+            fn marshal(self) -> Self::Type {
+                self
+            }
+
+            #[inline]
+            unsafe fn demarshal(x: Self::Type) -> Self {
+                x
+            }
+        }
+    }
+}
+
+macro_rules! fnptr_impls_args {
+    ($($Arg: ident),+) => {
+        fnptr_impls_safety_abi! { extern "Rust" fn($($Arg),+) -> Ret, $($Arg),+ }
+        fnptr_impls_safety_abi! { extern "C" fn($($Arg),+) -> Ret, $($Arg),+ }
+        fnptr_impls_safety_abi! { extern "C" fn($($Arg),+ , ...) -> Ret, $($Arg),+ }
+        fnptr_impls_safety_abi! { extern "C-unwind" fn($($Arg),+) -> Ret, $($Arg),+ }
+        fnptr_impls_safety_abi! { extern "C-unwind" fn($($Arg),+ , ...) -> Ret, $($Arg),+ }
+        fnptr_impls_safety_abi! { unsafe extern "Rust" fn($($Arg),+) -> Ret, $($Arg),+ }
+        fnptr_impls_safety_abi! { unsafe extern "C" fn($($Arg),+) -> Ret, $($Arg),+ }
+        fnptr_impls_safety_abi! { unsafe extern "C" fn($($Arg),+ , ...) -> Ret, $($Arg),+ }
+        fnptr_impls_safety_abi! { unsafe extern "C-unwind" fn($($Arg),+) -> Ret, $($Arg),+ }
+        fnptr_impls_safety_abi! { unsafe extern "C-unwind" fn($($Arg),+ , ...) -> Ret, $($Arg),+ }
+    };
+    () => {
+        // No variadic functions with 0 parameters
+        fnptr_impls_safety_abi! { extern "Rust" fn() -> Ret, }
+        fnptr_impls_safety_abi! { extern "C" fn() -> Ret, }
+        fnptr_impls_safety_abi! { extern "C-unwind" fn() -> Ret, }
+        fnptr_impls_safety_abi! { unsafe extern "Rust" fn() -> Ret, }
+        fnptr_impls_safety_abi! { unsafe extern "C" fn() -> Ret, }
+        fnptr_impls_safety_abi! { unsafe extern "C-unwind" fn() -> Ret, }
+    };
+}
+
+fnptr_impls_args! {}
+fnptr_impls_args! { T }
+fnptr_impls_args! { A, B }
+fnptr_impls_args! { A, B, C }
+fnptr_impls_args! { A, B, C, D }
+fnptr_impls_args! { A, B, C, D, E }
+fnptr_impls_args! { A, B, C, D, E, F }
+fnptr_impls_args! { A, B, C, D, E, F, G }
+fnptr_impls_args! { A, B, C, D, E, F, G, H }
+fnptr_impls_args! { A, B, C, D, E, F, G, H, I }
+fnptr_impls_args! { A, B, C, D, E, F, G, H, I, J }
+fnptr_impls_args! { A, B, C, D, E, F, G, H, I, J, K }
+fnptr_impls_args! { A, B, C, D, E, F, G, H, I, J, K, L }
 
 // Implement for wrappers
 unsafe impl<T> CTypeBridge for std::mem::ManuallyDrop<T>

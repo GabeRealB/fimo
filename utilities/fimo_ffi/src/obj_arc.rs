@@ -1299,6 +1299,7 @@ unsafe impl<T: ?Sized, A: Allocator> CTypeBridge for ObjArc<T, A>
 where
     A: CTypeBridge,
     A::Type: Allocator,
+    T: CTypeBridge<Type = T>,
 {
     default type Type = ObjArc<T, A::Type>;
 
@@ -2094,6 +2095,7 @@ unsafe impl<T: ?Sized, A: Allocator> CTypeBridge for ObjWeak<T, A>
 where
     A: CTypeBridge,
     A::Type: Allocator,
+    T: CTypeBridge<Type = T>,
 {
     default type Type = ObjWeak<T, A::Type>;
 

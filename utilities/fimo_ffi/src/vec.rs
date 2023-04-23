@@ -2696,11 +2696,10 @@ impl<T> ReprRust for Vec<T, Global> {
 
 unsafe impl<T, A: Allocator> CTypeBridge for Vec<T, A>
 where
-    A: CTypeBridge,
-    A::Type: Allocator,
+    A: CTypeBridge + Clone,
+    A::Type: Allocator + Clone,
+    T: CTypeBridge<Type = T>,
 {
-    type Type = Vec<T, A::Type>;
-
     fn marshal(self) -> Self::Type {
         let (ptr, len, cap, alloc) = Vec::into_raw_parts_with_alloc(self);
         unsafe { Vec::from_raw_parts_in(ptr, len, cap, alloc.marshal()) }
@@ -2709,6 +2708,29 @@ where
     unsafe fn demarshal(x: Self::Type) -> Self {
         let (ptr, len, cap, alloc) = Vec::into_raw_parts_with_alloc(x);
         Vec::from_raw_parts_in(ptr, len, cap, A::demarshal(alloc))
+    }
+}
+
+unsafe impl<T, A: Allocator> CTypeBridge for Vec<T, A>
+where
+    A: CTypeBridge + Clone,
+    A::Type: Allocator + Clone,
+    T: CTypeBridge,
+{
+    type Type = Vec<T::Type, A::Type>;
+
+    default fn marshal(self) -> Self::Type {
+        let alloc = self.allocator().clone().marshal();
+        let mut vec = Vec::with_capacity_in(self.len(), alloc);
+        vec.extend(self.into_iter().map(CTypeBridge::marshal));
+        vec
+    }
+
+    default unsafe fn demarshal(x: Self::Type) -> Self {
+        let alloc = A::demarshal(x.allocator().clone());
+        let mut vec = Vec::with_capacity_in(x.len(), alloc);
+        vec.extend(x.into_iter().map(|x| unsafe { T::demarshal(x) }));
+        vec
     }
 }
 
