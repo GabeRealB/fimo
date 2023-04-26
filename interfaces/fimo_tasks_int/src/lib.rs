@@ -5,6 +5,9 @@
     missing_debug_implementations,
     rustdoc::broken_intra_doc_links
 )]
+#![feature(maybe_uninit_array_assume_init)]
+#![feature(maybe_uninit_uninit_array)]
+#![feature(maybe_uninit_slice)]
 #![feature(strict_provenance)]
 #![feature(negative_impls)]
 #![feature(const_mut_refs)]
@@ -22,6 +25,7 @@ use fimo_module::Queryable;
 pub mod sync;
 
 pub mod blockable;
+pub mod buffer;
 pub mod group;
 pub mod local;
 pub mod runtime2;
