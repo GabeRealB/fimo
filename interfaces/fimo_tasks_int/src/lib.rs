@@ -25,6 +25,7 @@ pub mod blockable;
 pub mod group;
 pub mod local;
 pub mod runtime2;
+pub mod task2;
 
 pub mod raw;
 pub mod runtime;
