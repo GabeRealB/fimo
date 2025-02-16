@@ -288,6 +288,15 @@ pub const Time = struct {
         return t.durationSince(time);
     }
 
+    /// Returns the order of two time points.
+    pub fn order(self: Time, other: Time) std.math.Order {
+        if (self.secs < other.secs) return .lt;
+        if (self.secs > other.secs) return .gt;
+        if (self.sub_sec_nanos < other.sub_sec_nanos) return .lt;
+        if (self.sub_sec_nanos > other.sub_sec_nanos) return .gt;
+        return .eq;
+    }
+
     /// Returns the difference between two time points.
     pub fn durationSince(time: Time, earlier: Time) error{Overflow}!Duration {
         const t_dur = Duration{ .secs = time.secs, .sub_sec_nanos = time.sub_sec_nanos };

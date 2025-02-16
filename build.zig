@@ -76,11 +76,7 @@ pub fn build(b: *std.Build) void {
         _ = add_package(
             b,
             "fimo_std_rs",
-            .{
-                .target = target,
-                .optimize = optimize,
-                .manifest = b.path("Cargo.toml"),
-            },
+            .{ .target = target, .optimize = optimize, .manifest = b.path("Cargo.toml") },
             modules,
             test_step,
             doc_step,
@@ -98,11 +94,17 @@ pub fn build(b: *std.Build) void {
         _ = add_package(
             b,
             "fimo_python",
-            .{
-                .target = target,
-                .optimize = optimize,
-                .modules = modules.getDirectory(),
-            },
+            .{ .target = target, .optimize = optimize, .modules = modules.getDirectory() },
+            modules,
+            test_step,
+            doc_step,
+            check_step,
+            &packages,
+        );
+        _ = add_package(
+            b,
+            "fimo_tasks",
+            .{ .target = target, .optimize = optimize, .modules = modules.getDirectory() },
             modules,
             test_step,
             doc_step,
